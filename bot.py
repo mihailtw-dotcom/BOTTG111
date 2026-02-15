@@ -5,9 +5,12 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
 from PIL import Image, ImageFilter, ImageEnhance
 import random
+from flask import Flask
+from threading import Thread
+import os
 
-# 🔹 ВАЖНО: вставь токен в кавычках
-BOT_TOKEN = "8397167261:AAFjgCzvWb7cGeKte-fEfUWZtSUrtA-e7UY"
+import os
+BOT_TOKEN = os.environ.get("8397167261:AAFjgCzvWb7cGeKte-fEfUWZtSUrtA-e7UY")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -84,21 +87,16 @@ async def callbacks(call: types.CallbackQuery):
         if call.data == "enhance":
             enhancer = ImageEnhance.Sharpness(img)
             img = enhancer.enhance(1.8)
-
         elif call.data == "bw":
             img = img.convert("L")
-
         elif call.data == "contrast":
             enhancer = ImageEnhance.Contrast(img)
             img = enhancer.enhance(1.5)
-
         elif call.data == "brightness":
             enhancer = ImageEnhance.Brightness(img)
             img = enhancer.enhance(1.3)
-
         elif call.data == "blur":
             img = img.filter(ImageFilter.BLUR)
-
         elif call.data == "sepia":
             img = img.convert("RGB")
             r, g, b = img.split()
@@ -106,7 +104,6 @@ async def callbacks(call: types.CallbackQuery):
             g = g.point(lambda i: i * 0.8)
             b = b.point(lambda i: i * 0.7)
             img = Image.merge("RGB", (r,g,b))
-
         elif call.data == "vintage":
             img = img.convert("RGB")
             r, g, b = img.split()
@@ -114,7 +111,6 @@ async def callbacks(call: types.CallbackQuery):
             g = g.point(lambda i: i * 0.85)
             b = b.point(lambda i: i * 0.7)
             img = Image.merge("RGB", (r,g,b))
-
         elif call.data == "invert":
             img = Image.eval(img, lambda x: 255 - x)
 
@@ -159,6 +155,19 @@ async def assistant(message: Message):
         "Расскажи подробнее 😉"
     ]))
 
-# ▶️ Запуск
+# 🔹 Flask сервер для Render
+app = Flask("")
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+def run():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+Thread(target=run).start()
+
+# ▶️ Запуск бота
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
