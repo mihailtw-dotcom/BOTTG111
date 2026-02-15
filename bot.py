@@ -6,7 +6,11 @@ from aiogram.utils import executor
 from PIL import Image, ImageFilter, ImageEnhance
 import random
 
-BOT_TOKEN = "8397167261:AAFjgCzvWb7cGeKte-fEfUWZtSUrtA-e7UY"
+# 🔹 ВАЖНО: вставь токен в кавычках
+BOT_TOKEN = 8397167261:AAFjgCzvWb7cGeKte-fEfUWZtSUrtA-e7UY
+          ^
+SyntaxError: invalid syntax
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -161,5 +165,3 @@ async def assistant(message: Message):
 # ▶️ Запуск
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
-
-
