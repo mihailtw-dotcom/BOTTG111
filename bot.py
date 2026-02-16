@@ -1,13 +1,10 @@
 import os
 import logging
 import asyncio
-from datetime import datetime
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-from PIL import Image, ImageFilter, ImageEnhance
-import random
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
@@ -16,205 +13,150 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
-user_photos = {}
-user_edited = {}
-user_mode = {}
+HLTV_API = "https://hltv-api.vercel.app/matches"
+
+subscribers_live = set()
+
+# 🔥 Получение матчей
+def get_matches():
+    try:
+        return requests.get(HLTV_API).json()
+    except:
+        return []
+
+# 🎮 Карточка матча
+def match_card(match):
+    return (
+        f"🎮 **{match['team1']} vs {match['team2']}**\n"
+        f"🏆 {match['event']}\n"
+        f"🔥 {match['status'].upper()}\n"
+        f"🎯 {match.get('score', 'TBD')}\n"
+        f"🕒 {match['date']}\n"
+    )
 
 # 🌟 Главное меню
 def main_menu():
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("🖼 Редактор Фото", callback_data="photo"))
-    kb.add(InlineKeyboardButton("🤖 Ассистент", callback_data="ai"))
-    kb.add(InlineKeyboardButton("🌤 Инфо", callback_data="info"))
-    kb.add(InlineKeyboardButton("🎮 HLTV Матчи", callback_data="matches"))
+    kb.add(InlineKeyboardButton("🔥 LIVE", callback_data="live"))
+    kb.add(InlineKeyboardButton("📅 Матчи", callback_data="matches"))
+    kb.add(InlineKeyboardButton("🔔 Подписка LIVE", callback_data="sub_live"))
     return kb
-
-# 🎨 Фото меню
-def photo_menu():
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("✨ Улучшить", callback_data="enhance"))
-    kb.add(InlineKeyboardButton("🖤 Ч/Б", callback_data="bw"))
-    kb.add(InlineKeyboardButton("🌈 Контраст", callback_data="contrast"))
-    kb.add(InlineKeyboardButton("💡 Яркость", callback_data="brightness"))
-    kb.add(InlineKeyboardButton("🌫 Размытие", callback_data="blur"))
-    kb.add(InlineKeyboardButton("🎨 Сепия", callback_data="sepia"))
-    kb.add(InlineKeyboardButton("🌅 Винтаж", callback_data="vintage"))
-    kb.add(InlineKeyboardButton("🌈 Инверсия", callback_data="invert"))
-    kb.add(InlineKeyboardButton("🖌 Аниме", callback_data="anime"))
-    kb.add(InlineKeyboardButton("♻ Сброс", callback_data="reset"))
-    kb.add(InlineKeyboardButton("⬅ Назад", callback_data="back"))
-    return kb
-
-# 🔥 HLTV API
-def get_matches():
-    try:
-        url = "https://hltv-api.vercel.app/matches"
-        return requests.get(url).json()
-    except:
-        return []
 
 # 🚀 Старт
 @dp.message_handler(commands=['start'])
 async def start(message: Message):
     await message.answer(
-        "Привет 😎🔥\n\nЯ УЛЬТИМАТИВНЫЙ бот:\n"
-        "🖼 Фото / Anime\n"
-        "🤖 Ассистент\n"
-        "🌤 Погода / Время\n"
-        "🎮 HLTV Матчи\n\n"
+        "😎🔥 **CYBER BOT PRO** 🔥😎\n\n"
+        "✔ LIVE матчи\n"
+        "✔ Авто-обновление\n"
+        "✔ Уведомления\n"
+        "✔ Расписание\n\n"
         "Выбирай:",
+        parse_mode="Markdown",
         reply_markup=main_menu()
     )
 
-# 📌 Callback
-@dp.callback_query_handler()
-async def callbacks(call: types.CallbackQuery):
+# 🔥 LIVE матчи
+@dp.message_handler(commands=['live'])
+async def live_matches(message: Message):
+    data = get_matches()
+    live = [m for m in data if m["status"] == "live"]
+
+    if not live:
+        await message.answer("🚫 Сейчас нет LIVE матчей")
+        return
+
+    for m in live:
+        await message.answer(match_card(m), parse_mode="Markdown")
+
+# 📅 Матчи
+@dp.message_handler(commands=['matches'])
+async def upcoming_matches(message: Message):
+    data = get_matches()
+
+    for m in data[:5]:
+        await message.answer(match_card(m), parse_mode="Markdown")
+
+# 🔎 Фильтр по команде
+@dp.message_handler(commands=['team'])
+async def team_filter(message: Message):
+    try:
+        team_name = message.text.split()[1].lower()
+    except:
+        await message.answer("Пример: /team navi")
+        return
+
+    data = get_matches()
+
+    filtered = [
+        m for m in data
+        if team_name in m["team1"].lower()
+        or team_name in m["team2"].lower()
+    ]
+
+    if not filtered:
+        await message.answer("🚫 Матчи не найдены")
+        return
+
+    for m in filtered:
+        await message.answer(match_card(m), parse_mode="Markdown")
+
+# 🔔 Подписка LIVE
+@dp.callback_query_handler(lambda c: c.data == "sub_live")
+async def subscribe_live(call: types.CallbackQuery):
     user_id = call.from_user.id
 
-    if call.data == "photo":
-        user_mode[user_id] = "photo"
-        await call.message.edit_text("Отправь фото 📸")
+    if user_id in subscribers_live:
+        subscribers_live.remove(user_id)
+        await call.answer("❌ Подписка отключена", show_alert=True)
+    else:
+        subscribers_live.add(user_id)
+        await call.answer("✅ Подписка на LIVE включена", show_alert=True)
 
-    elif call.data == "ai":
-        user_mode[user_id] = "ai"
-        await call.message.edit_text("AI режим 🤖")
-
-    elif call.data == "info":
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("⏰ Время", callback_data="time"))
-        kb.add(InlineKeyboardButton("🌤 Погода", callback_data="weather"))
-        kb.add(InlineKeyboardButton("⬅ Назад", callback_data="back"))
-        await call.message.edit_text("Информация:", reply_markup=kb)
-
+# ▶️ Callback
+@dp.callback_query_handler()
+async def callbacks(call: types.CallbackQuery):
+    if call.data == "live":
+        await live_matches(call.message)
     elif call.data == "matches":
-        data = get_matches()
+        await upcoming_matches(call.message)
 
-        if not data:
-            await call.message.answer("Ошибка HLTV API 😔")
-            return
+# 🚨 LIVE авто-мониторинг
+async def live_monitor():
+    last_live = set()
 
-        text = "🎮 Ближайшие матчи:\n\n"
+    while True:
+        await asyncio.sleep(30)  # обновление каждые 30 сек
 
-        for m in data[:5]:
-            text += f"{m['team1']} vs {m['team2']}\n"
-            text += f"🕒 {m['date']}\n"
-            text += f"🏆 {m['event']}\n\n"
+        matches = get_matches()
+        live = [m for m in matches if m["status"] == "live"]
 
-        kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("🔥 LIVE", callback_data="live"))
-        kb.add(InlineKeyboardButton("⬅ Назад", callback_data="back"))
+        current_live = set(
+            f"{m['team1']} vs {m['team2']}" for m in live
+        )
 
-        await call.message.edit_text(text, reply_markup=kb)
+        new_live = current_live - last_live
 
-    elif call.data == "live":
-        data = get_matches()
-        live = [m for m in data if m['status'] == "live"]
+        if new_live:
+            for match in live:
+                key = f"{match['team1']} vs {match['team2']}"
 
-        if not live:
-            await call.message.answer("🚫 Сейчас нет LIVE матчей")
-            return
+                if key in new_live:
+                    for user_id in subscribers_live:
+                        try:
+                            await bot.send_message(
+                                user_id,
+                                f"🚨 **НОВЫЙ LIVE МАТЧ** 🚨\n\n{match_card(match)}",
+                                parse_mode="Markdown"
+                            )
+                        except:
+                            pass
 
-        text = "🔥 LIVE матчи:\n\n"
-
-        for m in live:
-            text += f"{m['team1']} vs {m['team2']}\n"
-            text += f"🎯 {m.get('score', 'Идёт')}\n\n"
-
-        await call.message.answer(text)
-
-    elif call.data == "back":
-        await call.message.edit_text("Главное меню:", reply_markup=main_menu())
-
-    elif call.data == "time":
-        now = datetime.now().strftime("%H:%M:%S %d-%m-%Y")
-        await call.message.answer(f"⏰ Время:\n{now}")
-
-    elif call.data == "weather":
-        try:
-            weather = requests.get("https://wttr.in/?format=3").text
-            await call.message.answer(f"🌤 Погода:\n{weather}")
-        except:
-            await call.message.answer("Ошибка погоды 😔")
-
-    elif call.data in ["enhance","bw","contrast","brightness","blur","sepia","vintage","invert","anime","reset"]:
-
-        if user_id not in user_photos:
-            await call.answer("Сначала фото 📸", show_alert=True)
-            return
-
-        if call.data == "reset":
-            img_path = user_photos[user_id]
-            user_edited[user_id] = img_path
-            await call.message.answer_photo(types.InputFile(img_path), reply_markup=photo_menu())
-            return
-
-        img_path = user_edited.get(user_id, user_photos[user_id])
-        img = Image.open(img_path)
-
-        msg = await call.message.answer("✨ Обработка...")
-
-        if call.data == "enhance":
-            img = ImageEnhance.Sharpness(img).enhance(1.8)
-        elif call.data == "bw":
-            img = img.convert("L")
-        elif call.data == "contrast":
-            img = ImageEnhance.Contrast(img).enhance(1.5)
-        elif call.data == "brightness":
-            img = ImageEnhance.Brightness(img).enhance(1.3)
-        elif call.data == "blur":
-            img = img.filter(ImageFilter.BLUR)
-        elif call.data == "sepia":
-            r,g,b = img.split()
-            img = Image.merge("RGB",(r.point(lambda i:i*0.9), g.point(lambda i:i*0.8), b.point(lambda i:i*0.7)))
-        elif call.data == "vintage":
-            r,g,b = img.split()
-            img = Image.merge("RGB",(r.point(lambda i:i*0.9), g.point(lambda i:i*0.85), b.point(lambda i:i*0.7)))
-        elif call.data == "invert":
-            img = Image.eval(img, lambda x: 255-x)
-        elif call.data == "anime":
-            img = img.convert("RGB")
-            img = img.filter(ImageFilter.CONTOUR)
-            img = ImageEnhance.Contrast(img).enhance(1.8)
-
-        edited_path = f"edited_{user_id}.jpg"
-        img.save(edited_path)
-
-        user_edited[user_id] = edited_path
-
-        await msg.delete()
-        await call.message.answer_photo(types.InputFile(edited_path), reply_markup=photo_menu())
-
-# 🖼 Фото
-@dp.message_handler(content_types=['photo'])
-async def handle_photo(message: Message):
-    user_id = message.from_user.id
-
-    if user_mode.get(user_id) != "photo":
-        return
-
-    photo = message.photo[-1]
-    path = f"photo_{user_id}.jpg"
-
-    await photo.download(destination_file=path)
-
-    user_photos[user_id] = path
-    user_edited[user_id] = path
-
-    await message.answer("Фото получено ✅", reply_markup=photo_menu())
-
-# 🤖 AI Ассистент
-@dp.message_handler()
-async def assistant(message: Message):
-    if user_mode.get(message.from_user.id) != "ai":
-        return
-
-    await message.answer(random.choice([
-        "Интересно 😏",
-        "Согласен 👍",
-        "Хмм 🤔",
-        "Расскажи подробнее 😉"
-    ]))
+        last_live = current_live
 
 # ▶️ Запуск
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+async def on_startup(dp):
+    asyncio.create_task(live_monitor())
+
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
